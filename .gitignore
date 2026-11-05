@@ -12,9 +12,13 @@ coverage/
 
 .vscode-test/
 .DS_Store
+Thumbs.db
 
 __pycache__/
 .venv/
 venv/
 
 *.vsix
+
+# TypeScript build info
+*.tsbuildinfo
