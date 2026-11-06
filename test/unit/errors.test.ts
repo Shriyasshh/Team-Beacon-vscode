@@ -23,6 +23,10 @@ describe("ForgePilotError", () => {
       "TOOL_EXECUTION",
       "SESSION_ERROR",
       "CANCELLED",
+      "UNAUTHORIZED",
+      "NETWORK_SECURITY",
+      "UNREACHABLE_SERVER",
+      "MODEL_ERROR",
     ];
     for (const code of codes) {
       const err = new ForgePilotError(code, `test ${code}`);

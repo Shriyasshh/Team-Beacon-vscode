@@ -15,7 +15,11 @@ export type ForgePilotErrorCode =
   | "STALE_FILE"
   | "TOOL_EXECUTION"
   | "SESSION_ERROR"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "UNAUTHORIZED"
+  | "NETWORK_SECURITY"
+  | "UNREACHABLE_SERVER"
+  | "MODEL_ERROR";
 
 /**
  * Base error class for all ForgePilot-specific errors.

@@ -12,12 +12,12 @@
 
 ## Verification Snapshot
 
-- **Last reviewed**: 2026-11-05
+- **Last reviewed**: 2026-11-06
 - **Branch**: `feature/trueforge-integration`
 - **Node / npm / TypeScript / VS Code**: Node v22.23.1 · npm 10.9.8 · TypeScript 5.9.3 · VS Code ^1.142.0
 - **TrueForge SDK version**: `@truefoundry/trueforge-sdk@0.184.1` (verified live with standalone server `v0.184.1`)
 - **MCP SDK version**: `@modelcontextprotocol/sdk@1.32.2` (verified live over SSE transport)
-- **Active Verification Tests**: 4 test files, 26/26 tests passing (`npm test`)
+- **Active Verification Tests**: 4 test files, 35/35 tests passing (`npm test`)
 
 ---
 
@@ -92,8 +92,16 @@ The signatures below are **ForgePilot application-level contracts** agreed acros
 | `log` | `(level: LogLevel, message: string, data?: unknown) => void` | M2 | ✅ Implemented | [`src/utils/logging.ts`](../src/utils/logging.ts) | Verified |
 | `disposeLogger` | `() => void` | M2 | ✅ Implemented | [`src/utils/logging.ts`](../src/utils/logging.ts) | Verified |
 | `ForgePilotError` | `class extends Error` | Shared | ✅ Implemented | [`src/utils/errors.ts`](../src/utils/errors.ts) | `errors.test.ts` (3/3 passed) |
-| `TrueForgeIntegrationSpike` | Vitest Suite (6 tests) | M1 | ✅ Implemented | [`test/integration/trueforgeSpike.test.ts`](../test/integration/trueforgeSpike.test.ts) | **6/6 passed live against server** |
+| `TrueForgeIntegrationSpike` | Vitest Suite (15 tests) | M1 | ✅ Implemented | [`test/integration/trueforgeSpike.test.ts`](../test/integration/trueforgeSpike.test.ts) | **15/15 passed live against server** |
 | `MCPToolInvocationSpike` | Standalone verified script | M1 | ✅ Implemented | [`scripts/mcp-spike.mjs`](../scripts/mcp-spike.mjs) | Verified: TrueForge SSE -> MCP tool |
+| `createTrueForgeClient` | `(baseUrl: string, token?: string) => TrueForge` | M1 | ✅ Implemented | [`src/integration/trueforgeAdapter.ts`](../src/integration/trueforgeAdapter.ts) | `trueforgeSpike.test.ts` (15/15 passed) |
+| `startSession` (A-01) | `(client: TrueForge, options: SessionOptions) => Promise<string>` | M1 | ✅ Implemented | [`src/integration/trueforgeAdapter.ts`](../src/integration/trueforgeAdapter.ts) | `trueforgeSpike.test.ts` |
+| `runAgent` (A-02) | `(client: TrueForge, sessionId: string, options: AgentRunOptions) => Promise<AsyncIterable<AgentEvent>>` | M1 | ✅ Implemented | [`src/integration/trueforgeAdapter.ts`](../src/integration/trueforgeAdapter.ts) | `trueforgeSpike.test.ts` |
+| `subscribeToEvents` (A-03) | `(stream: AsyncIterable<AgentEvent>, handler: (event: AgentEvent) => void) => () => void` | M1 | ✅ Implemented | [`src/integration/trueforgeAdapter.ts`](../src/integration/trueforgeAdapter.ts) | `trueforgeSpike.test.ts` |
+| `cancelRun` (A-04) | `(client: TrueForge, sessionId: string) => Promise<void>` | M1 | ✅ Implemented | [`src/integration/trueforgeAdapter.ts`](../src/integration/trueforgeAdapter.ts) | `trueforgeSpike.test.ts` |
+| `disposeSession` (A-05) | `(client: TrueForge, sessionId: string) => Promise<void>` | M1 | ✅ Implemented | [`src/integration/trueforgeAdapter.ts`](../src/integration/trueforgeAdapter.ts) | `trueforgeSpike.test.ts` |
+| `mapTrueForgeError` (A-06) | `(error: unknown) => ForgePilotError` | M1 | ✅ Implemented | [`src/integration/trueforgeAdapter.ts`](../src/integration/trueforgeAdapter.ts) | `trueforgeSpike.test.ts` |
+| `checkAgentAvailability` (A-07) | `(baseUrl: string, token?: string) => Promise<boolean>` | M1 | ✅ Implemented | [`src/integration/trueforgeAdapter.ts`](../src/integration/trueforgeAdapter.ts) | `trueforgeSpike.test.ts` |
 
 ---
 
@@ -118,4 +126,5 @@ TrueForge `TurnStreamingEvent` items are mapped to normalized ForgePilot events 
 | Date | Member | Description | PR / Commit |
 |---|---|---|---|
 | 2026-11-05 | M2 | Initial extension scaffold, constants, path validation, errors | `c3206c1` |
-| 2026-11-05 | M1 | Verified TrueForge SDK (`0.184.1`), MCP SDK (`1.32.2`), live turn streaming, cancellation, and MCP tool invocation spike | `feature/trueforge-integration` |
+| 2026-11-05 | M1 | Verified TrueForge SDK (`0.184.1`), MCP SDK (`1.32.2`), live turn streaming, cancellation, and MCP tool invocation spike | `feature/trueforge-integration` (`dc4ab96`) |
+| 2026-11-06 | M1 | Closed verification gaps: outbound SSRF allowlist (`OUTBOUND_URL_ALLOWED_HOSTS`), 401 auth resilience tests, model failure handling, declarative agent definition (`agent/forgepilot.yaml`), two-tier approval architecture, and adapter implementation (A-01 to A-07) | `feature/trueforge-integration` |

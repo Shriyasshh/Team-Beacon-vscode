@@ -137,3 +137,85 @@ export interface ForgePilotConfig {
   /** Maximum tokens of context to assemble per turn. */
   readonly maxContextTokens: number;
 }
+
+// ---------------------------------------------------------------------------
+// TrueForge session & streaming contracts (Member 1)
+// ---------------------------------------------------------------------------
+
+/** Configuration for an MCP server attached to an agent session. */
+export interface McpServerConfig {
+  /** Name of the registered MCP server in TrueForge settings. */
+  readonly name: string;
+  /** Whether the server tools should be preloaded before the turn starts. */
+  readonly preload?: boolean;
+  /**
+   * Tool names or tags requiring explicit human approval before execution.
+   * Special tags: "@write", "@destructive"
+   */
+  readonly requireApprovalForTools?: string[];
+}
+
+/** Specification for an inline or registered TrueForge agent. */
+export interface AgentSpecConfig {
+  /** Model fully-qualified identifier, e.g. "google-gemini/gemini-3-5-flash". */
+  readonly modelName: string;
+  /** System prompt / instructions directing the agent loop. */
+  readonly instructions: string;
+  /** Optional MCP servers attached to the agent session. */
+  readonly mcpServers?: McpServerConfig[];
+}
+
+/** Options for creating a TrueForge session. */
+export interface SessionOptions {
+  /** Inline specification for the agent. */
+  readonly agentSpec?: AgentSpecConfig;
+  /** Name of a pre-registered agent in TrueForge. */
+  readonly agentName?: string;
+}
+
+/** Normalized event types emitted during turn execution. */
+export type AgentEventType =
+  | "turn.created"
+  | "text.delta"
+  | "tool.started"
+  | "tool.completed"
+  | "turn.completed"
+  | "turn.cancelled"
+  | "turn.error";
+
+/**
+ * Normalized streaming event from the TrueForge agent loop.
+ * TrueForge SDK types remain internal to the integration adapter.
+ */
+export interface AgentEvent {
+  readonly type: AgentEventType;
+  /** Streamed text content chunk (present for "text.delta" or final output). */
+  readonly content?: string;
+  /** Unique turn identifier. */
+  readonly turnId?: string;
+  /** Tool call identifier if this event pertains to a tool. */
+  readonly toolCallId?: string;
+  /** Name of the MCP tool being called. */
+  readonly toolName?: string;
+  /** Arguments passed to the tool. */
+  readonly toolArgs?: Record<string, unknown>;
+  /** Serialized tool response payload. */
+  readonly toolResult?: string;
+  /** Error message if the turn or tool failed. */
+  readonly error?: string;
+}
+
+/** Options for executing a turn. */
+export interface AgentRunOptions {
+  /** The user prompt or instruction. */
+  readonly prompt: string;
+  /** Optional context items retrieved by the context engine (Member 3). */
+  readonly contextItems?: ContextItem[];
+}
+
+/** Terminal result of an agent run. */
+export interface AgentRunResult {
+  readonly status: "completed" | "cancelled" | "error";
+  readonly fullText: string;
+  readonly error?: string;
+}

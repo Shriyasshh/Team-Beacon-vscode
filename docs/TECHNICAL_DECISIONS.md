@@ -53,17 +53,33 @@ Use this file to record decisions based on actual repository inspection and offi
 - Verified model configuration method:
   - Model providers configured centrally on TrueForge server (e.g. `google-gemini` with `gemini-3-5-flash`, `gemini-flash-latest`).
   - Zero model API keys, tokens or provider secrets in ForgePilot extension code or Git repository.
+- Verified Network Security Policy & SSRF Guard:
+  - **Do NOT disable network policy globally** (`NETWORK_POLICY_ENABLED=false` was a temporary spike workaround).
+  - Recommended and verified configuration: Start TrueForge server with `OUTBOUND_URL_ALLOWED_HOSTS='["::1", "127.0.0.1", "localhost"]'` with `NETWORK_POLICY_ENABLED=true` (the default).
+  - Note: `OUTBOUND_URL_ALLOWED_HOSTS` uses `parseJsonStringArrayEnv` in TrueForge `config.ts` and **must** be a valid JSON string array.
+  - Verified behavior:
+    1. Unapproved private IP destinations (`http://10.0.0.1:8080/sse`) and unapproved internal hostnames (`http://internal-payroll.corp:8080/sse`) are blocked with HTTP `400 BadRequestError: Outbound URL blocked for host ...`.
+    2. Allowlisted loopback destinations (`http://[::1]:<port>/sse`) are permitted.
+    3. Unavailable MCP server behavior: When an MCP server is registered on an allowed address but is offline, TrueForge attempts `streamable-http` and `sse`, catches `ECONNREFUSED`, and emits `turn.done` with `state: { status: "error", message: "[MCP Error] Failed to connect to remote MCP server ..." }`. The server process and client stream remain fully responsive, and zero workspace changes occur.
+- Verified Authentication Resilience:
+  - Invalid TrueForge token / 401 Unauthorized: SDK throws `TrueForgeError` with `statusCode: 401`, which `mapTrueForgeError` translates to `ForgePilotError` (`code: "UNAUTHORIZED"`).
+  - Invalid model provider credentials / unreachable API: Emits `turn.done` with `status: "error"` (`[Model Error] Cannot connect to API` or auth failure). The extension maps this to `turn.error` AgentEvent; zero files are modified and the process remains responsive.
+- Clarification of MCP Approval Responsibilities (Two-Tier Safety Architecture):
+  - **Tier 1 (TrueForge Loop Level):** TrueForge halts turn execution before invoking tools matching `requireApprovalForTools: ["@write", "@destructive"]`, emitting a `tool.approval_required` event and awaiting `user.tool_approval`.
+  - **Tier 2 (ForgePilot Workspace Safety Level - Member 4):** TrueForge *never* performs diff inspection or file rollback. To satisfy Non-Negotiable Rules 6 and 7, `propose_file_change` generates a `ProposedChange` with `DiffHunk[]` rather than writing directly to disk. The user reviews diffs in VS Code (Member 2), and only explicit hunk acceptance (`acceptHunk`) applies edits to disk after stale-file conflict checks (`checkFileVersion`).
+- Verified Agent Configuration Format:
+  - TrueForge accepts `AgentSpec`: `{ model: { name: string }, instructions: string, mcpServers?: McpServer[], config?: RuntimeConfig }`.
+  - Declarative workspace specification created at [`agent/forgepilot.yaml`](../agent/forgepilot.yaml).
+  - Can be registered via `client.agents.create({ name, description, manifest: spec })` or supplied inline in session creation. Referenced MCP servers must exist in TrueForge settings prior to agent registration.
 - Known limitations & server quirks:
   - Server defaults to binding IPv6 loopback `[::1]:<port>` on Linux. Use `http://[::1]:8795` for local connections.
   - Default standalone port is `8790` (can be configured via `--port <n>`).
-  - SSRF guard (`assertSafeOutboundUrl`) blocks loopback/private hosts (`127.0.0.1`, `::1`, `localhost`) by default.
-  - For local workspace MCP server integration, start TrueForge server with `NETWORK_POLICY_ENABLED=false` or configure `OUTBOUND_URL_ALLOWED_HOSTS`.
 
 ## Architecture decisions
 | Decision | Chosen approach | Alternatives considered | Reason | Date |
 |---|---|---|---|---|
 | Package manager | npm | pnpm, yarn | Ships with Node 22, simplest setup, no extra install | 2026-11-05 |
-| Module system | Node16 (CJS output via esbuild) | ESM | VS Code extensions require CJS entry point; esbuild bundles to CJS | 2026-11-05 |
+| Module system | Node16 / Bundler (CJS output via esbuild) | ESM | VS Code extensions require CJS entry point; esbuild bundles to CJS | 2026-11-05 |
 | Build tool | esbuild | webpack, tsc alone | Fast bundling, single output file, sourcemaps; recommended by VS Code docs | 2026-11-05 |
 | TypeScript target | ES2022 | ES2020, ESNext | Matches Node 22 baseline; avoids needing polyfills | 2026-11-05 |
 | VS Code engine | ^1.142.0 | Lower version | Matches installed VS Code; use latest API features | 2026-11-05 |
@@ -72,23 +88,29 @@ Use this file to record decisions based on actual repository inspection and offi
 | Formatter | Prettier | ESLint formatting rules | Dedicated formatter avoids rule conflicts | 2026-11-05 |
 | Extension entry | `dist/extension.js` (esbuild bundle) | `out/extension.js` (tsc) | Single file, tree-shaken, faster load | 2026-11-05 |
 | TrueForge SDK | `@truefoundry/trueforge-sdk@0.184.1` | Direct HTTP/fetch | Official SDK provides full typed contracts and SSE stream parsing | 2026-11-05 |
+| TrueForge Adapter | `src/integration/trueforgeAdapter.ts` | Direct SDK usage across extension | Strict encapsulation; TrueForge types never leak into UI/Tools | 2026-11-06 |
 | MCP SDK | `@modelcontextprotocol/sdk@1.32.2` | Custom JSON-RPC | Official MCP SDK matches TrueForge internal MCP client transport | 2026-11-05 |
 | MCP Transport | Remote SSE / HTTP on local port | stdio | TrueForge harness communicates with MCP servers via remote URLs (`RemoteMcpServerManifest`) | 2026-11-05 |
+| Outbound Network Policy | `OUTBOUND_URL_ALLOWED_HOSTS='["::1", "127.0.0.1", "localhost"]'` | Disable network policy globally | Narrow allowlist permits local MCP while blocking unapproved SSRF destinations | 2026-11-06 |
 | Agent Loop Ownership | TrueForge server owns loop | Extension-side loop | Strictly required by competition rule #3 | 2026-11-05 |
 
 ## Shared interfaces
 Agreed TypeScript interfaces are in [`src/types.ts`](../src/types.ts).
 Internal contracts map to TrueForge verified APIs:
-- `SessionState`: tracks TrueForge `session.data.id` and active turn state.
+- `SessionOptions`, `AgentSpecConfig`, `McpServerConfig`: typed parameters for session creation without exposing raw SDK types.
+- `AgentEvent`, `AgentEventType`: normalized event union mapped from TrueForge `TurnStreamingEvent` types.
 - `ToolDefinition`: mapped to `@modelcontextprotocol/sdk` tool declarations.
-- `AgentEvent`: normalized union mapped from TrueForge `TurnStreamingEvent` types.
+- `ProposedChange`, `DiffHunk`: diff-review data structures ensuring safe proposal-before-apply flow.
 
 ## Risks / open questions
 | Question or risk | Owner | Next action | Status |
 |---|---|---|---|
 | TrueForge SDK actual types vs web-search types | Member 1 | Verified against `@truefoundry/trueforge-sdk@0.184.1` | ✅ RESOLVED |
-| MCP tool exposure mechanism | Member 1 + 4 | Verified: HTTP/SSE MCP server with `NETWORK_POLICY_ENABLED=false` | ✅ RESOLVED |
+| MCP tool exposure mechanism | Member 1 + 4 | Verified: HTTP/SSE MCP server with `OUTBOUND_URL_ALLOWED_HOSTS` | ✅ RESOLVED |
+| MCP approval responsibilities | Member 1 + 4 | Verified: Two-tier approval architecture (TrueForge loop + M4 diff review) | ✅ RESOLVED |
 | Server cancellation behavior | Member 1 | Verified: `client.sessions.cancel(id)` emits `turn.done` with `status: "cancelled"` | ✅ RESOLVED |
+| Network security & SSRF allowlist | Member 1 | Verified: `OUTBOUND_URL_ALLOWED_HOSTS` blocks unapproved destinations | ✅ RESOLVED |
+| Authentication resilience & error mapping | Member 1 | Verified: 401 mapped to `UNAUTHORIZED`, model errors handled gracefully | ✅ RESOLVED |
 | Model provider configuration | Member 1 | Verified: configured in TrueForge server (`google-gemini`), zero keys in code | ✅ RESOLVED |
 | TrueFoundry API key availability | Team | Verified working locally with standalone TrueForge | ✅ RESOLVED |
 | ripgrep not installed on dev machine | Member 3 | `sudo dnf install ripgrep` or Node fallback for symbol search | PENDING (M3) |
