@@ -33,8 +33,8 @@ export const CONFIG_SECTION = EXTENSION_ID;
  * These will be overridden by user settings and .env.
  */
 export const DEFAULTS = {
-  /** Default TrueForge server URL for local development. */
-  TRUEFORGE_BASE_URL: "http://localhost:8891",
+  /** Default TrueForge server URL for local development (verified IPv6 standalone port). */
+  TRUEFORGE_BASE_URL: "http://[::1]:8795",
   /** Maximum context window tokens to send per turn. */
   MAX_CONTEXT_TOKENS: 32_000,
 } as const;

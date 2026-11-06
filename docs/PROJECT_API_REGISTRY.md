@@ -1,78 +1,121 @@
-# ForgePilot — Project API Registry
+# ForgePilot — Project API & Contract Registry
 
-> Every public function, class, and interface created in this project must be registered here with its exact signature, source location, description, owner, and status.
+> This is the shared source of truth for Team Beacon. It records agreed application contracts, verified integration interfaces, actual implemented functions, descriptions, ownership, test results, and dependencies.
 >
-> Do **not** register speculative or planned APIs — only code that exists in the repository.
+> **Contributor Rules:**
+> 1. Read this registry and inspect actual source code before coding.
+> 2. Do not invent TrueForge APIs. Verified SDK is `@truefoundry/trueforge-sdk@0.184.1`.
+> 3. Do not silently change another member's public contract. Coordinate first.
+> 4. Update this file in the same PR as each API addition or change.
 
 ---
 
-## Extension Entry Point
+## Verification Snapshot
 
-| Symbol | Signature | Source | Description | Owner | Status |
+- **Last reviewed**: 2026-11-05
+- **Branch**: `feature/trueforge-integration`
+- **Node / npm / TypeScript / VS Code**: Node v22.23.1 · npm 10.9.8 · TypeScript 5.9.3 · VS Code ^1.142.0
+- **TrueForge SDK version**: `@truefoundry/trueforge-sdk@0.184.1` (verified live with standalone server `v0.184.1`)
+- **MCP SDK version**: `@modelcontextprotocol/sdk@1.32.2` (verified live over SSE transport)
+- **Active Verification Tests**: 4 test files, 26/26 tests passing (`npm test`)
+
+---
+
+# 1. Agreed Application-Level Contracts
+
+The signatures below are **ForgePilot application-level contracts** agreed across all 4 members. They wrap the underlying TrueForge SDK and VS Code APIs to provide clean boundaries.
+
+## Member 1 — TrueForge Integration
+
+| ID | Contract Name | Signature | Description | Verified SDK Mechanism | Status |
 |---|---|---|---|---|---|
-| `activate` | `(context: vscode.ExtensionContext) => void` | [`src/extension.ts`](../src/extension.ts) | VS Code extension activation entry point. Registers commands and initialises services. | M2 | ✅ Implemented |
-| `deactivate` | `() => void` | [`src/extension.ts`](../src/extension.ts) | VS Code extension deactivation hook. Cleans up resources. | M2 | ✅ Stub |
+| A-01 | `startSession` | `(options: SessionOptions) => Promise<string>` | Start a session in TrueForge with inline `AgentSpec` | `client.sessions.create({ agent: { spec } })` -> `res.data.id` | ✅ Agreed / Verified |
+| A-02 | `runAgent` | `(sessionId: string, options: AgentRunOptions) => Promise<AsyncIterable<AgentEvent>>` | Submit turn to TrueForge and return streaming event iterator | `client.sessions.createTurnStream(sessionId, { input })` | ✅ Agreed / Verified |
+| A-03 | `subscribeToEvents` | `(stream: AsyncIterable<AgentEvent>, handler: (event: AgentEvent) => void) => () => void` | Consume normalized stream events (deltas, tools, status) | Async iterator over `TurnStreamingEvent` | ✅ Agreed / Verified |
+| A-04 | `cancelRun` | `(sessionId: string) => Promise<void>` | Interrupt in-flight model/tool execution | `client.sessions.cancel(sessionId)` -> `turn.done` with `status: "cancelled"` | ✅ Agreed / Verified |
+| A-05 | `disposeSession` | `(sessionId: string) => Promise<void>` | Delete session and clean up server resources | `client.sessions.delete(sessionId)` | ✅ Agreed / Verified |
+| A-06 | `mapTrueForgeError` | `(error: unknown) => ForgePilotError` | Map SDK / HTTP / network errors to typed `ForgePilotError` | Inspect `err instanceof TrueForgeError`, `.statusCode`, `.message` | ✅ Agreed / Verified |
+| A-07 | `checkAgentAvailability`| `(baseUrl: string) => Promise<boolean>` | Health check server and model readiness without secrets | `client.agents.list()` / `client.models.list()` | ✅ Agreed / Verified |
 
-## Constants
+## Member 2 — VS Code Extension & UI
 
-| Symbol | Type | Source | Description | Owner | Status |
+| ID | Contract Name | Signature | Description | Status |
+|---|---|---|---|---|
+| U-01 | `activate` | `(context: vscode.ExtensionContext) => void` | Entry point: register commands, output channel, and services | ✅ Implemented |
+| U-02 | `deactivate` | `() => void` | Clean up active subscriptions, dispose servers | ✅ Implemented (stub) |
+| U-03 | `registerForgePilotCommands` | `(context: vscode.ExtensionContext) => vscode.Disposable[]` | Register chat, inline edit, cancel commands | 📝 Agreed |
+| U-04 | `openAgentPanel` | `() => Promise<void>` | Focus/reveal chat or agent panel | 📝 Agreed |
+| U-05 | `submitUserPrompt` | `(prompt: string) => Promise<void>` | Validate input and drive M1 `runAgent` | 📝 Agreed |
+| U-06 | `startInlineEdit` | `(selection: vscode.Selection, instruction: string) => Promise<void>` | Selected-code inline edit pipeline | 📝 Agreed |
+| U-07 | `renderAgentEvent` | `(event: AgentEvent) => void` | Render streaming text deltas and tool status chips in UI | 📝 Agreed |
+| U-08 | `showUserError` | `(error: ForgePilotError) => void` | Display actionable notifications with recovery hints | 📝 Agreed |
+
+## Member 3 — Context Engineering
+
+| ID | Contract Name | Signature | Description | Status |
+|---|---|---|---|---|
+| C-01 | `discoverWorkspaceFiles` | `(options?: DiscoveryOptions) => Promise<WorkspaceFile[]>` | Discover workspace files respecting .gitignore, binary, size limits | 📝 Agreed |
+| C-02 | `searchWorkspace` | `(query: string, options?: SearchOptions) => Promise<SearchMatch[]>` | Fast regex/content search within workspace | 📝 Agreed |
+| C-03 | `extractSymbols` | `(file: WorkspaceFile) => Promise<SymbolInfo[]>` | Parse definitions/classes/functions from source | 📝 Agreed |
+| C-04 | `rankContext` | `(query: string, candidates: ContextCandidate[]) => RankedContext[]` | Score and rank candidate files/symbols | 📝 Agreed |
+| C-05 | `buildContextBundle` | `(query: string, options: BudgetOptions) => Promise<ContextBundle>` | Assemble bounded context within max token limit | 📝 Agreed |
+| C-06 | `estimateContextSize` | `(bundle: ContextBundle) => number` | Estimate token size using character heuristics | 📝 Agreed |
+| C-07 | `invalidateIndex` | `(changedFiles: string[]) => Promise<void>` | Invalidate cached context on file write | 📝 Agreed |
+
+## Member 4 — MCP Tools, Diff Safety & Testing
+
+| ID | Contract Name | Signature | Description | Status |
+|---|---|---|---|---|
+| T-01 | `readWorkspaceFile` | `(path: string) => Promise<string>` | Safely read file within workspace boundary | 📝 Agreed |
+| T-02 | `searchWorkspaceTool` | `(query: string) => Promise<ToolResult>` | Expose workspace search as an MCP tool | 📝 Agreed |
+| T-03 | `proposeFileChange` | `(input: ProposedChangeInput) => ProposedChange` | Create proposed patch; NEVER writes silently | 📝 Agreed |
+| T-04 | `createDiff` | `(change: ProposedChange) => DiffHunk[]` | Parse diff into reviewable hunks | 📝 Agreed |
+| T-05 | `acceptHunk` | `(changeId: string, hunkId: string) => Promise<ApplyResult>` | Apply single approved hunk after stale-file validation | 📝 Agreed |
+| T-06 | `rejectHunk` | `(changeId: string, hunkId: string) => void` | Mark hunk rejected; leaves file untouched | 📝 Agreed |
+| T-07 | `undoAppliedChange` | `(changeId: string) => Promise<UndoResult>` | Safely revert applied change from backup | 📝 Agreed |
+| T-08 | `runWorkspaceCommand` | `(command: string, approval: boolean) => Promise<CommandResult>` | Execute allowlisted non-destructive command | 📝 Agreed |
+| T-09 | `validateWorkspacePath`| `(filePath: string, workspaceRoot: string) => string` | Path traversal prevention (`../` guard) | ✅ Implemented, tested |
+| T-10 | `checkFileVersion` | `(path: string, originalContent: string) => boolean` | Stale-file conflict detector before applying diff | 📝 Agreed |
+
+---
+
+# 2. Actual Implementation Ledger
+
+| Symbol | Exact Signature | Owner | Status | Source Location | Tests + Result |
 |---|---|---|---|---|---|
-| `EXTENSION_ID` | `"forgepilot"` | [`src/constants.ts`](../src/constants.ts) | Extension identifier matching package.json name. | M2 | ✅ Implemented |
-| `EXTENSION_DISPLAY_NAME` | `"ForgePilot"` | [`src/constants.ts`](../src/constants.ts) | Human-readable display name. | M2 | ✅ Implemented |
-| `COMMANDS.ACTIVATE` | `"forgepilot.activate"` | [`src/constants.ts`](../src/constants.ts) | VS Code command ID for the activation command. | M2 | ✅ Implemented |
-| `CONFIG_SECTION` | `"forgepilot"` | [`src/constants.ts`](../src/constants.ts) | VS Code settings section prefix. | M2 | ✅ Implemented |
-| `DEFAULTS.TRUEFORGE_BASE_URL` | `"http://localhost:8891"` | [`src/constants.ts`](../src/constants.ts) | Default TrueForge server URL. | M2 | ✅ Implemented |
-| `DEFAULTS.MAX_CONTEXT_TOKENS` | `32_000` | [`src/constants.ts`](../src/constants.ts) | Default context budget. | M2 | ✅ Implemented |
+| `activate` | `(context: vscode.ExtensionContext) => void` | M2 | ✅ Implemented | [`src/extension.ts`](../src/extension.ts) | Verified in extension bundle |
+| `deactivate` | `() => void` | M2 | ✅ Stub | [`src/extension.ts`](../src/extension.ts) | Verified |
+| `validateWorkspacePath` | `(filePath: string, workspaceRoot: string) => string` | M4 | ✅ Implemented | [`src/utils/pathValidation.ts`](../src/utils/pathValidation.ts) | `pathValidation.test.ts` (12/12 passed) |
+| `isPathWithinWorkspace` | `(filePath: string, workspaceRoot: string) => boolean` | M4 | ✅ Implemented | [`src/utils/pathValidation.ts`](../src/utils/pathValidation.ts) | `pathValidation.test.ts` |
+| `PathValidationError` | `class extends Error` | M4 | ✅ Implemented | [`src/utils/pathValidation.ts`](../src/utils/pathValidation.ts) | `pathValidation.test.ts` |
+| `getOutputChannel` | `() => vscode.OutputChannel` | M2 | ✅ Implemented | [`src/utils/logging.ts`](../src/utils/logging.ts) | Verified |
+| `log` | `(level: LogLevel, message: string, data?: unknown) => void` | M2 | ✅ Implemented | [`src/utils/logging.ts`](../src/utils/logging.ts) | Verified |
+| `disposeLogger` | `() => void` | M2 | ✅ Implemented | [`src/utils/logging.ts`](../src/utils/logging.ts) | Verified |
+| `ForgePilotError` | `class extends Error` | Shared | ✅ Implemented | [`src/utils/errors.ts`](../src/utils/errors.ts) | `errors.test.ts` (3/3 passed) |
+| `TrueForgeIntegrationSpike` | Vitest Suite (6 tests) | M1 | ✅ Implemented | [`test/integration/trueforgeSpike.test.ts`](../test/integration/trueforgeSpike.test.ts) | **6/6 passed live against server** |
+| `MCPToolInvocationSpike` | Standalone verified script | M1 | ✅ Implemented | [`scripts/mcp-spike.mjs`](../scripts/mcp-spike.mjs) | Verified: TrueForge SSE -> MCP tool |
 
-## Shared Interfaces (`src/types.ts`) — DRAFT
+---
 
-| Symbol | Kind | Source | Description | Owner | Status |
-|---|---|---|---|---|---|
-| `ChangeStatus` | Type alias | [`src/types.ts`](../src/types.ts) | Status of a proposed change: `"pending" \| "reviewing" \| "applied" \| "rejected" \| "undone"` | M4 | 📝 Draft |
-| `HunkStatus` | Type alias | [`src/types.ts`](../src/types.ts) | Status of a diff hunk: `"pending" \| "accepted" \| "rejected"` | M4 | 📝 Draft |
-| `DiffHunk` | Interface | [`src/types.ts`](../src/types.ts) | A single diff hunk with id, line range, old/new text, and status. | M4 | 📝 Draft |
-| `ProposedChange` | Interface | [`src/types.ts`](../src/types.ts) | A proposed file modification with hunks and review status. | M4 | 📝 Draft |
-| `ContextItemType` | Type alias | [`src/types.ts`](../src/types.ts) | Kind of context item: `"file" \| "symbol" \| "search-result"` | M3 | 📝 Draft |
-| `ContextItem` | Interface | [`src/types.ts`](../src/types.ts) | Context item with path, content, line range, relevance, and type. | M3 | 📝 Draft |
-| `ToolResult` | Interface | [`src/types.ts`](../src/types.ts) | Tool execution result: `{ success, output, error? }` | M4 | 📝 Draft |
-| `ToolDefinition` | Interface | [`src/types.ts`](../src/types.ts) | MCP tool definition with name, schema, handler, and approval flag. | M4 | 📝 Draft |
-| `ForgePilotConfig` | Interface | [`src/types.ts`](../src/types.ts) | Extension runtime configuration. | M1 | 📝 Draft |
+# 3. Normalized Event Registry
 
-## Utilities
+TrueForge `TurnStreamingEvent` items are mapped to normalized ForgePilot events in the adapter layer:
 
-| Symbol | Signature | Source | Description | Owner | Status |
-|---|---|---|---|---|---|
-| `validateWorkspacePath` | `(filePath: string, workspaceRoot: string) => string` | [`src/utils/pathValidation.ts`](../src/utils/pathValidation.ts) | Validates a path is within the workspace root. Returns resolved absolute path. Throws `PathValidationError` on violation. | M4 | ✅ Implemented, tested |
-| `isPathWithinWorkspace` | `(filePath: string, workspaceRoot: string) => boolean` | [`src/utils/pathValidation.ts`](../src/utils/pathValidation.ts) | Non-throwing variant of `validateWorkspacePath`. | M4 | ✅ Implemented, tested |
-| `PathValidationError` | `class extends Error` | [`src/utils/pathValidation.ts`](../src/utils/pathValidation.ts) | Error thrown when path escapes workspace boundary. | M4 | ✅ Implemented, tested |
-| `getOutputChannel` | `() => vscode.OutputChannel` | [`src/utils/logging.ts`](../src/utils/logging.ts) | Get or create the shared ForgePilot output channel. | M2 | ✅ Implemented |
-| `log` | `(level: LogLevel, message: string, data?: unknown) => void` | [`src/utils/logging.ts`](../src/utils/logging.ts) | Timestamped, level-tagged log to the output channel. | M2 | ✅ Implemented |
-| `disposeLogger` | `() => void` | [`src/utils/logging.ts`](../src/utils/logging.ts) | Dispose the output channel. | M2 | ✅ Implemented |
-| `LogLevel` | Type alias | [`src/utils/logging.ts`](../src/utils/logging.ts) | `"debug" \| "info" \| "warn" \| "error"` | M2 | ✅ Implemented |
-| `ForgePilotError` | `class extends Error` | [`src/utils/errors.ts`](../src/utils/errors.ts) | Base error with typed `code` field. | Shared | ✅ Implemented, tested |
-| `ForgePilotErrorCode` | Type alias | [`src/utils/errors.ts`](../src/utils/errors.ts) | Union of known error codes. | Shared | ✅ Implemented |
-
-## Commands (VS Code)
-
-| Command ID | Title | Handler Location | Status |
+| Normalized Event | Mapped from TrueForge Event | Description | Consumer |
 |---|---|---|---|
-| `forgepilot.activate` | ForgePilot: Activate | [`src/extension.ts`](../src/extension.ts) | ✅ Registered |
+| `turn.created` | `type: "turn.created"` | Turn initialized with unique Turn ID | M2 UI (progress start) |
+| `text.delta` | `type: "model.message.delta"` | Incremental assistant token/content chunk | M2 UI (streaming markdown) |
+| `tool.started` | `type: "mcp.initialize"` / `tool.call` | Agent initiates MCP tool invocation | M2 UI (tool chip running) |
+| `tool.completed` | `type: "tool.response"` | MCP tool returned output to agent | M2 UI (tool chip success) |
+| `turn.completed` | `type: "turn.done"` with `status: "done"` | Turn finished successfully | M2 UI / M4 (diff review check) |
+| `turn.cancelled` | `type: "turn.done"` with `status: "cancelled"` | User aborted turn | M2 UI / M4 (discard pending) |
+| `turn.error` | `type: "turn.done"` with `status: "error"` / `TrueForgeError` | Model/server failure | M2 UI (actionable error display) |
 
 ---
 
-## Pending Registrations (Member Responsibilities)
+# 4. Change Log
 
-### Member 1 — TrueForge Integration
-- `TrueForgeAdapter` class / session management functions — after SDK verification
-- `SessionState` type updates — after SDK type inspection
-- Agent definition file (`agent/forgepilot.yaml`) — after format verification
-
-### Member 3 — Context Engine
-- `ContextEngine` class — file discovery, ranking, budget
-- `fileDiscovery`, `symbolSearch` functions
-
-### Member 4 — MCP Tools & Diff Review
-- MCP tool implementations (`readFile`, `searchFiles`, `listFiles`, `writeFile`, `terminal`)
-- `DiffManager`, `HunkReview`, `ApplyManager`, `UndoManager` classes
-- Tool registry
-
+| Date | Member | Description | PR / Commit |
+|---|---|---|---|
+| 2026-11-05 | M2 | Initial extension scaffold, constants, path validation, errors | `c3206c1` |
+| 2026-11-05 | M1 | Verified TrueForge SDK (`0.184.1`), MCP SDK (`1.32.2`), live turn streaming, cancellation, and MCP tool invocation spike | `feature/trueforge-integration` |

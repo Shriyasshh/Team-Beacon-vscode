@@ -41,13 +41,16 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.142.0",
+    "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.24.0",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.0.0",
-    "vitest": "^3.0.0",
-    "@vscode/vsce": "^3.0.0"
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@truefoundry/trueforge-sdk": "0.184.1",
+    "@modelcontextprotocol/sdk": "1.32.2"
   }
 }
-
